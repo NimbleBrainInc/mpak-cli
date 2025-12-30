@@ -1,0 +1,138 @@
+import { RegistryClient } from '../../lib/api/registry-client.js';
+
+export interface ShowOptions {
+  json?: boolean;
+}
+
+/**
+ * Show detailed information about a bundle (v1 API)
+ */
+export async function handleShow(
+  packageName: string,
+  options: ShowOptions = {}
+): Promise<void> {
+  try {
+    const client = new RegistryClient();
+
+    // Fetch bundle details and versions in parallel
+    const [bundle, versionsInfo] = await Promise.all([
+      client.getBundle(packageName),
+      client.getVersions(packageName),
+    ]);
+
+    if (options.json) {
+      console.log(JSON.stringify({ ...bundle, versions_detail: versionsInfo.versions }, null, 2));
+      return;
+    }
+
+    // Header
+    const verified = bundle.verified ? '✓ ' : '';
+    const provenance = bundle.provenance ? '🔒 ' : '';
+    console.log(`\n${verified}${provenance}${bundle.display_name || bundle.name} v${bundle.latest_version}\n`);
+
+    // Description
+    if (bundle.description) {
+      console.log(bundle.description);
+      console.log();
+    }
+
+    // Basic info
+    console.log('Bundle Information:');
+    console.log(`  Name: ${bundle.name}`);
+    if (bundle.author?.name) {
+      console.log(`  Author: ${bundle.author.name}`);
+    }
+    if (bundle.server_type) {
+      console.log(`  Type: ${bundle.server_type}`);
+    }
+    if (bundle.license) {
+      console.log(`  License: ${bundle.license}`);
+    }
+    if (bundle.homepage) {
+      console.log(`  Homepage: ${bundle.homepage}`);
+    }
+    console.log();
+
+    // Provenance info
+    if (bundle.provenance) {
+      console.log('Provenance:');
+      console.log(`  Repository: ${bundle.provenance.repository}`);
+      console.log(`  Commit: ${bundle.provenance.sha.substring(0, 12)}`);
+      console.log(`  Provider: ${bundle.provenance.provider}`);
+      console.log();
+    }
+
+    // Stats
+    console.log('Statistics:');
+    console.log(`  Downloads: ${bundle.downloads.toLocaleString()}`);
+    console.log(`  Published: ${new Date(bundle.published_at).toLocaleDateString()}`);
+    console.log();
+
+    // GitHub info
+    if (bundle.github) {
+      console.log('GitHub:');
+      console.log(`  Repository: ${bundle.github.repo}`);
+      if (bundle.github.stars != null) console.log(`  Stars: ${bundle.github.stars}`);
+      if (bundle.github.forks != null) console.log(`  Forks: ${bundle.github.forks}`);
+      if (bundle.github.watchers != null) console.log(`  Watchers: ${bundle.github.watchers}`);
+      console.log();
+    }
+
+    // Tools
+    if (bundle.tools && bundle.tools.length > 0) {
+      console.log(`Tools (${bundle.tools.length}):`);
+      for (const tool of bundle.tools) {
+        console.log(`  - ${tool.name}`);
+        if (tool.description) {
+          console.log(`    ${tool.description}`);
+        }
+      }
+      console.log();
+    }
+
+    // Versions with platforms
+    if (versionsInfo.versions && versionsInfo.versions.length > 0) {
+      console.log(`Versions (${versionsInfo.versions.length}):`);
+      const recentVersions = versionsInfo.versions.slice(0, 5);
+      for (const version of recentVersions) {
+        const date = new Date(version.published_at).toLocaleDateString();
+        const downloads = version.downloads.toLocaleString();
+        const isLatest = version.version === versionsInfo.latest ? ' (latest)' : '';
+        const provTag = version.provenance ? ' 🔒' : '';
+
+        // Format platforms
+        const platformStrs = version.platforms.map((p) => `${p.os}-${p.arch}`);
+        const platformsDisplay = platformStrs.length > 0 ? ` [${platformStrs.join(', ')}]` : '';
+
+        console.log(`  ${version.version}${isLatest}${provTag} - ${date} - ${downloads} downloads${platformsDisplay}`);
+      }
+      if (versionsInfo.versions.length > 5) {
+        console.log(`  ... and ${versionsInfo.versions.length - 5} more`);
+      }
+      console.log();
+    }
+
+    // Available platforms for latest version
+    const latestVersion = versionsInfo.versions.find((v) => v.version === versionsInfo.latest);
+    if (latestVersion && latestVersion.platforms.length > 0) {
+      console.log('Available Platforms:');
+      for (const platform of latestVersion.platforms) {
+        console.log(`  - ${platform.os}-${platform.arch}`);
+      }
+      console.log();
+    }
+
+    // Install instructions
+    console.log('Install:');
+    console.log(`  mpak install ${bundle.name}`);
+    console.log();
+    console.log('Pull (download only):');
+    console.log(`  mpak pull ${bundle.name}`);
+  } catch (error) {
+    console.error('=> Failed to get bundle details');
+    if (error instanceof Error) {
+      console.error(`   ${error.message}`);
+    }
+    process.exit(1);
+  }
+}
