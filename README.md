@@ -1,5 +1,12 @@
 # mpak CLI
 
+[![CI](https://github.com/NimbleBrainInc/mpak-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/NimbleBrainInc/mpak-cli/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![npm](https://img.shields.io/npm/v/@nimblebrain/mpak)](https://www.npmjs.com/package/@nimblebrain/mpak)
+[![node](https://img.shields.io/node/v/@nimblebrain/mpak)](https://nodejs.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?logo=discord&logoColor=white)](https://www.nimblebrain.ai/discord?utm_source=github&utm_medium=readme&utm_campaign=mpak-cli&utm_content=discord-badge)
+
 CLI for discovering and downloading MCPB bundles from the mpak registry.
 
 ## Installation

@@ -51,8 +51,7 @@ export interface paths {
                                     description?: string;
                                 }[];
                                 downloads: number;
-                                /** Format: date-time */
-                                published_at: string;
+                                published_at: string | unknown;
                                 verified: boolean;
                                 provenance?: {
                                     schema_version: string;
@@ -121,27 +120,19 @@ export interface paths {
                                 description?: string;
                             }[];
                             downloads: number;
-                            /** Format: date-time */
-                            published_at: string;
+                            published_at: string | unknown;
                             verified: boolean;
-                            homepage?: string | null;
-                            license?: string | null;
-                            github?: {
-                                repo: string;
-                                stars?: number | null;
-                                forks?: number | null;
-                                watchers?: number | null;
-                            } | null;
                             provenance?: {
                                 schema_version: string;
                                 provider: string;
                                 repository: string;
                                 sha: string;
                             } | null;
+                            homepage?: string | null;
+                            license?: string | null;
                             versions: {
                                 version: string;
-                                /** Format: date-time */
-                                published_at: string;
+                                published_at: string | unknown;
                                 downloads: number;
                             }[];
                         };
@@ -188,15 +179,13 @@ export interface paths {
                             mimeType: string;
                             name: string;
                             version: string;
-                            description?: string | null;
+                            description: string | null;
                             bundles: {
-                                mimeType: string;
+                                mimeType: string | null;
                                 digest: string;
                                 size: number;
                                 platform: {
-                                    /** @description Operating system (darwin, linux, win32, any) */
                                     os: string;
-                                    /** @description Architecture (x64, arm64, any) */
                                     arch: string;
                                 };
                                 urls: string[];
@@ -250,15 +239,12 @@ export interface paths {
                                 version: string;
                                 artifacts_count: number;
                                 platforms: {
-                                    /** @description Operating system (darwin, linux, win32, any) */
                                     os: string;
-                                    /** @description Architecture (x64, arm64, any) */
                                     arch: string;
                                 }[];
-                                /** Format: date-time */
-                                published_at: string;
+                                published_at: string | unknown;
                                 downloads: number;
-                                publish_method?: string | null;
+                                publish_method: string | null;
                                 provenance?: {
                                     schema_version: string;
                                     provider: string;
@@ -309,14 +295,11 @@ export interface paths {
                         "application/json": {
                             name: string;
                             version: string;
-                            /** Format: date-time */
-                            published_at: string;
+                            published_at: string | unknown;
                             downloads: number;
                             artifacts: {
                                 platform: {
-                                    /** @description Operating system (darwin, linux, win32, any) */
                                     os: string;
-                                    /** @description Architecture (x64, arm64, any) */
                                     arch: string;
                                 };
                                 digest: string;
@@ -324,16 +307,19 @@ export interface paths {
                                 download_url: string;
                                 source_url?: string;
                             }[];
-                            manifest?: {
+                            manifest: {
                                 [key: string]: unknown;
                             };
                             release?: {
-                                tag?: string;
-                                url?: string;
-                            } | null;
-                            publish_method?: string | null;
-                            provenance?: {
-                                [key: string]: unknown;
+                                tag: string | null;
+                                url: string | null;
+                            };
+                            publish_method: string | null;
+                            provenance: {
+                                schema_version: string;
+                                provider: string;
+                                repository: string;
+                                sha: string;
                             } | null;
                         };
                     };
@@ -386,16 +372,13 @@ export interface paths {
                                 name: string;
                                 version: string;
                                 platform: {
-                                    /** @description Operating system (darwin, linux, win32, any) */
                                     os: string;
-                                    /** @description Architecture (x64, arm64, any) */
                                     arch: string;
                                 };
                                 sha256: string;
                                 size: number;
                             };
-                            /** Format: date-time */
-                            expires_at: string;
+                            expires_at?: string;
                         };
                     };
                 };
@@ -425,7 +408,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Announce a new bundle version from a GitHub release (OIDC only) */
+        /** @description Announce a single artifact for a bundle version from a GitHub release (OIDC only). Idempotent - can be called multiple times for different artifacts of the same version. */
         post: {
             parameters: {
                 query?: never;
@@ -436,14 +419,21 @@ export interface paths {
             requestBody: {
                 content: {
                     "application/json": {
-                        /** @description Package name (@scope/name) */
                         name: string;
-                        /** @description Semantic version */
                         version: string;
-                        /** @description Bundle manifest */
-                        manifest: Record<string, never>;
-                        /** @description GitHub release tag (e.g., v0.1.0) */
+                        manifest: {
+                            [key: string]: unknown;
+                        };
                         release_tag: string;
+                        /** @default false */
+                        prerelease: boolean;
+                        artifact: {
+                            filename: string;
+                            os: string;
+                            arch: string;
+                            sha256: string;
+                            size: number;
+                        };
                     };
                 };
             };
@@ -455,34 +445,16 @@ export interface paths {
                     };
                     content: {
                         "application/json": {
-                            success: boolean;
-                            bundle: {
-                                name: string;
-                                version: string;
-                                artifacts_count: number;
+                            package: string;
+                            version: string;
+                            artifact: {
+                                os: string;
+                                arch: string;
+                                filename: string;
                             };
-                            release: {
-                                tag: string;
-                                url: string;
-                            };
-                            artifacts: {
-                                platform: {
-                                    /** @description Operating system (darwin, linux, win32, any) */
-                                    os: string;
-                                    /** @description Architecture (x64, arm64, any) */
-                                    arch: string;
-                                };
-                                digest: string;
-                                size: number;
-                                url: string;
-                                source_url: string;
-                            }[];
-                            provenance: {
-                                schema_version: string;
-                                provider: string;
-                                repository: string;
-                                sha: string;
-                            } | null;
+                            total_artifacts: number;
+                            /** @enum {string} */
+                            status: "created" | "updated";
                         };
                     };
                 };

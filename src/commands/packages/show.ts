@@ -65,18 +65,8 @@ export async function handleShow(
     // Stats
     console.log('Statistics:');
     console.log(`  Downloads: ${bundle.downloads.toLocaleString()}`);
-    console.log(`  Published: ${new Date(bundle.published_at).toLocaleDateString()}`);
+    console.log(`  Published: ${new Date(bundle.published_at as string).toLocaleDateString()}`);
     console.log();
-
-    // GitHub info
-    if (bundle.github) {
-      console.log('GitHub:');
-      console.log(`  Repository: ${bundle.github.repo}`);
-      if (bundle.github.stars != null) console.log(`  Stars: ${bundle.github.stars}`);
-      if (bundle.github.forks != null) console.log(`  Forks: ${bundle.github.forks}`);
-      if (bundle.github.watchers != null) console.log(`  Watchers: ${bundle.github.watchers}`);
-      console.log();
-    }
 
     // Tools
     if (bundle.tools && bundle.tools.length > 0) {
@@ -95,7 +85,7 @@ export async function handleShow(
       console.log(`Versions (${versionsInfo.versions.length}):`);
       const recentVersions = versionsInfo.versions.slice(0, 5);
       for (const version of recentVersions) {
-        const date = new Date(version.published_at).toLocaleDateString();
+        const date = new Date(version.published_at as string).toLocaleDateString();
         const downloads = version.downloads.toLocaleString();
         const isLatest = version.version === versionsInfo.latest ? ' (latest)' : '';
         const provTag = version.provenance ? ' 🔒' : '';
