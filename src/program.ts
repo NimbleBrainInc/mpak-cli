@@ -3,6 +3,7 @@ import { getVersion } from './utils/version.js';
 import { handleSearch } from './commands/packages/search.js';
 import { handleShow } from './commands/packages/show.js';
 import { handlePull } from './commands/packages/pull.js';
+import { handleRun } from './commands/packages/run.js';
 
 /**
  * Creates and configures the CLI program
@@ -70,6 +71,15 @@ export function createProgram(): Command {
     .option('--json', 'Output download info as JSON')
     .action(async (packageSpec, options) => {
       await handlePull(packageSpec, options);
+    });
+
+  // Run command
+  program
+    .command('run <package>')
+    .description('Run an MCP server from the registry (e.g., @scope/name or @scope/name@1.0.0)')
+    .option('--update', 'Force re-download even if cached')
+    .action(async (packageSpec, options) => {
+      await handleRun(packageSpec, options);
     });
 
   return program;

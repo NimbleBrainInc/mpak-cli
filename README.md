@@ -31,6 +31,7 @@ mpak pull @owner/my-server@1.0.0  # specific version
 | `info <package>` | Alias for show |
 | `pull <package>` | Download a bundle |
 | `install <package>` | Alias for pull |
+| `run <package>` | Run an MCP server from the registry |
 
 ### search
 
@@ -91,6 +92,39 @@ Options:
 - `--os <os>` - Target OS: darwin, linux, win32
 - `--arch <arch>` - Target architecture: x64, arm64
 - `--json` - Output download info as JSON (doesn't download)
+
+### run
+
+Run an MCP server directly from the registry. Bundles are cached locally for fast subsequent runs.
+
+```bash
+# Run latest version
+mpak run @nimblebraininc/echo
+
+# Run specific version
+mpak run @nimblebraininc/echo@1.0.0
+
+# Force re-download (update cache)
+mpak run @nimblebraininc/echo --update
+```
+
+Options:
+- `--update` - Force re-download even if cached
+
+**Claude Desktop Integration:**
+
+```json
+{
+  "mcpServers": {
+    "echo": {
+      "command": "mpak",
+      "args": ["run", "@nimblebraininc/echo"]
+    }
+  }
+}
+```
+
+Bundles are cached in `~/.mpak/cache/` and automatically extracted on first run.
 
 ## Configuration
 

@@ -16,6 +16,7 @@ This is a standalone CLI that uses only the public v1 API. It has no dependencie
 | `src/commands/packages/search.ts` | Search command implementation |
 | `src/commands/packages/show.ts` | Show/info command implementation |
 | `src/commands/packages/pull.ts` | Pull/install command implementation |
+| `src/commands/packages/run.ts` | Run command implementation (caching, extraction, execution) |
 | `src/utils/config-manager.ts` | Config file handling (~/.mpak/config.json) |
 
 ### Type Generation
@@ -102,6 +103,7 @@ npm run typecheck
 | `info <package>` | Alias for show |
 | `pull <package>` | Download a bundle |
 | `install <package>` | Alias for pull |
+| `run <package>` | Run an MCP server (pulls, caches, executes) |
 
 ## Design Decisions
 

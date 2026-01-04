@@ -15,10 +15,14 @@
     "lint:fix": "eslint src --fix",
     "prepublishOnly": "npm run build",
     "start": "node dist/index.js",
-    "test": "vitest",
+    "test": "vitest --run src",
+    "test:unit": "vitest --run src",
+    "test:integration": "vitest --run test/integration",
+    "test:all": "vitest --run",
+    "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc -p tsconfig.check.json"
   },
   "keywords": [
     "mcp",
