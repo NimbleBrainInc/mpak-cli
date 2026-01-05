@@ -16,7 +16,8 @@ This is a standalone CLI that uses only the public v1 API. It has no dependencie
 | `src/commands/packages/search.ts` | Search command implementation |
 | `src/commands/packages/show.ts` | Show/info command implementation |
 | `src/commands/packages/pull.ts` | Pull/install command implementation |
-| `src/commands/packages/run.ts` | Run command implementation (caching, extraction, execution) |
+| `src/commands/packages/run.ts` | Run command implementation (caching, extraction, execution, user_config substitution) |
+| `src/commands/config.ts` | Config commands (set, get, list, clear) |
 | `src/utils/config-manager.ts` | Config file handling (~/.mpak/config.json) |
 
 ### Type Generation
@@ -123,6 +124,59 @@ git push && git push --tags
 | `pull <package>` | Download a bundle |
 | `install <package>` | Alias for pull |
 | `run <package>` | Run an MCP server (pulls, caches, executes) |
+| `config set <pkg> <k=v...>` | Store config values for a package |
+| `config get <pkg>` | Show stored config (values masked) |
+| `config list` | List packages with stored config |
+| `config clear <pkg> [key]` | Clear stored config |
+
+## User Config (MCPB v0.3)
+
+Packages can declare `user_config` in their manifest for values like API keys:
+
+```json
+{
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "API Token",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "server": {
+    "mcp_config": {
+      "env": {
+        "API_TOKEN": "${user_config.api_key}"
+      }
+    }
+  }
+}
+```
+
+When `mpak run` executes, it substitutes `${user_config.*}` placeholders with actual values.
+
+### Value Resolution Priority
+
+1. **Stored config**: `~/.mpak/config.json` (set via `mpak config set`)
+2. **Environment variable**: `MPAK_CONFIG_<KEY>` (e.g., `MPAK_CONFIG_API_KEY`)
+3. **Default value**: From manifest's `user_config.*.default`
+4. **Interactive prompt**: If terminal is interactive and value is required
+
+### Examples
+
+```bash
+# Pre-configure a package
+mpak config set @nimblebraininc/ipinfo api_key=your_token
+
+# Run uses stored config automatically
+mpak run @nimblebraininc/ipinfo
+
+# Or use environment variable
+MPAK_CONFIG_API_KEY=your_token mpak run @nimblebraininc/ipinfo
+
+# View stored config (values masked)
+mpak config get @nimblebraininc/ipinfo
+```
 
 ## Design Decisions
 
