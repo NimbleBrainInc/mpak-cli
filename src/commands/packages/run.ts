@@ -214,7 +214,7 @@ function isInteractive(): boolean {
 }
 
 /**
- * Gather user config values from stored config and environment
+ * Gather user config values from stored config
  * Prompts for missing required values if interactive
  */
 async function gatherUserConfigValues(
@@ -227,15 +227,11 @@ async function gatherUserConfigValues(
   const missingRequired: Array<{ key: string; field: UserConfigField }> = [];
 
   for (const [key, field] of Object.entries(userConfig)) {
-    // Priority: 1) stored config, 2) environment variable, 3) default value
+    // Priority: 1) stored config, 2) default value
     const storedValue = storedConfig[key];
-    const envVarName = `MPAK_CONFIG_${key.toUpperCase()}`;
-    const envValue = process.env[envVarName];
 
     if (storedValue !== undefined) {
       result[key] = storedValue;
-    } else if (envValue !== undefined) {
-      result[key] = envValue;
     } else if (field.default !== undefined) {
       result[key] = String(field.default);
     } else if (field.required) {
@@ -249,7 +245,6 @@ async function gatherUserConfigValues(
       const missingKeys = missingRequired.map(m => m.key).join(', ');
       process.stderr.write(`=> Error: Missing required config: ${missingKeys}\n`);
       process.stderr.write(`=> Run 'mpak config set ${packageName} <key>=<value>' to set values\n`);
-      process.stderr.write(`=> Or set environment variables: ${missingRequired.map(m => `MPAK_CONFIG_${m.key.toUpperCase()}`).join(', ')}\n`);
       process.exit(1);
     }
 

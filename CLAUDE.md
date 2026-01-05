@@ -194,14 +194,12 @@ This bypasses user_config substitution entirely since the env var is already set
 
 ### Value Resolution Priority
 
-For each env var defined in the manifest:
-
 1. **Process environment** (highest): Env vars set by parent (e.g., Claude Desktop config)
 2. **Stored config**: `~/.mpak/config.json` (set via `mpak config set`)
 3. **Default value**: From manifest's `user_config.*.default`
-4. **Interactive prompt**: If terminal is interactive and value is required
+4. **Interactive prompt**: If TTY and value is required
 
-This means Claude Desktop env vars always take priority over `mpak config` values.
+Claude Desktop env vars always take priority over `mpak config` values.
 
 ### Important: Config Key Names
 
@@ -225,6 +223,7 @@ manifest.user_config.api_key  →  mpak config set ... api_key=xxx  →  env IPI
 - **No dotenv**: Removed due to v17 banner output breaking Claude Desktop MCP integration
 - **Type generation**: Requires server running locally (`npm run generate:types` hits localhost:3200)
 - **Schema changes**: May introduce breaking type changes; always run full verification after regenerating
+- **Env merge order**: Use `{ ...substitutedEnv, ...process.env }` so parent env vars (Claude Desktop) take priority over manifest substitutions
 
 ## Future Considerations
 
