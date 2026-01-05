@@ -92,6 +92,25 @@ MPAK_REGISTRY_URL=http://localhost:3200 node dist/index.js pull @nimblebraininc/
 ```bash
 npm run build
 npm run typecheck
+npm run test:all
+```
+
+### Publishing
+
+Prereleases (beta):
+```bash
+npm version 0.0.1-beta.X
+npm run build
+npm publish --tag beta --otp=<code>
+git push && git push --tags
+```
+
+Stable releases:
+```bash
+npm version X.X.X
+npm run build
+npm publish --otp=<code>
+git push && git push --tags
 ```
 
 ## Commands (MVP)
@@ -111,6 +130,12 @@ npm run typecheck
 2. **Public API only**: MVP uses only v1 API. Publishing requires separate tooling.
 3. **Platform detection**: Auto-detects OS/arch, allows explicit override for cross-platform downloads.
 4. **Config file**: Stores registry URL in `~/.mpak/config.json`, overridable via `MPAK_REGISTRY_URL`.
+
+## Gotchas
+
+- **No dotenv**: Removed due to v17 banner output breaking Claude Desktop MCP integration
+- **Type generation**: Requires server running locally (`npm run generate:types` hits localhost:3200)
+- **Schema changes**: May introduce breaking type changes; always run full verification after regenerating
 
 ## Future Considerations
 
