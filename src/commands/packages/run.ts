@@ -1,8 +1,10 @@
 import { spawn, spawnSync } from 'child_process';
+import { createInterface } from 'readline';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from 'fs';
 import { homedir } from 'os';
 import { join, dirname } from 'path';
 import { RegistryClient } from '../../lib/api/registry-client.js';
+import { ConfigManager } from '../../utils/config-manager.js';
 
 export interface RunOptions {
   update?: boolean;
@@ -14,11 +16,24 @@ interface McpConfig {
   env?: Record<string, string>;
 }
 
+/**
+ * User configuration field definition (MCPB v0.3 spec)
+ */
+interface UserConfigField {
+  type: 'string' | 'number' | 'boolean';
+  title?: string;
+  description?: string;
+  sensitive?: boolean;
+  required?: boolean;
+  default?: string | number | boolean;
+}
+
 interface McpbManifest {
   manifest_version: string;
   name: string;
   version: string;
   description: string;
+  user_config?: Record<string, UserConfigField>;
   server: {
     type: 'node' | 'python' | 'binary';
     entry_point: string;
@@ -34,8 +49,10 @@ interface CacheMetadata {
 
 /**
  * Parse package specification into name and version
+ * @example parsePackageSpec('@scope/name') => { name: '@scope/name' }
+ * @example parsePackageSpec('@scope/name@1.0.0') => { name: '@scope/name', version: '1.0.0' }
  */
-function parsePackageSpec(spec: string): { name: string; version?: string } {
+export function parsePackageSpec(spec: string): { name: string; version?: string } {
   const lastAtIndex = spec.lastIndexOf('@');
 
   if (lastAtIndex <= 0) {
@@ -54,8 +71,9 @@ function parsePackageSpec(spec: string): { name: string; version?: string } {
 
 /**
  * Get cache directory for a package
+ * @example getCacheDir('@scope/name') => '~/.mpak/cache/scope-name'
  */
-function getCacheDir(packageName: string): string {
+export function getCacheDir(packageName: string): string {
   const cacheBase = join(homedir(), '.mpak', 'cache');
   // @scope/name -> scope/name
   const safeName = packageName.replace('@', '').replace('/', '-');
@@ -115,11 +133,157 @@ function readManifest(cacheDir: string): McpbManifest {
 
 /**
  * Resolve placeholders in args (e.g., ${__dirname})
+ * @example resolveArgs(['${__dirname}/index.js'], '/cache') => ['/cache/index.js']
  */
-function resolveArgs(args: string[], cacheDir: string): string[] {
+export function resolveArgs(args: string[], cacheDir: string): string[] {
   return args.map(arg =>
     arg.replace(/\$\{__dirname\}/g, cacheDir)
   );
+}
+
+/**
+ * Substitute ${user_config.*} placeholders in a string
+ * @example substituteUserConfig('${user_config.api_key}', { api_key: 'secret' }) => 'secret'
+ */
+export function substituteUserConfig(
+  value: string,
+  userConfigValues: Record<string, string>
+): string {
+  return value.replace(/\$\{user_config\.([^}]+)\}/g, (match, key) => {
+    return userConfigValues[key] ?? match;
+  });
+}
+
+/**
+ * Substitute ${user_config.*} placeholders in env vars
+ */
+export function substituteEnvVars(
+  env: Record<string, string> | undefined,
+  userConfigValues: Record<string, string>
+): Record<string, string> {
+  if (!env) return {};
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(env)) {
+    result[key] = substituteUserConfig(value, userConfigValues);
+  }
+  return result;
+}
+
+/**
+ * Prompt user for a config value (interactive terminal input)
+ */
+async function promptForValue(
+  field: UserConfigField,
+  key: string
+): Promise<string> {
+  return new Promise((resolve) => {
+    const rl = createInterface({
+      input: process.stdin,
+      output: process.stderr,
+      terminal: true,
+    });
+
+    const label = field.title || key;
+    const hint = field.description ? ` (${field.description})` : '';
+    const defaultHint = field.default !== undefined ? ` [${field.default}]` : '';
+    const prompt = `=> ${label}${hint}${defaultHint}: `;
+
+    // For sensitive fields, we'd ideally hide input, but Node's readline
+    // doesn't support this natively. We'll just note it's sensitive.
+    if (field.sensitive) {
+      process.stderr.write(`=> (sensitive input)\n`);
+    }
+
+    rl.question(prompt, (answer) => {
+      rl.close();
+      // Use default if empty and default exists
+      if (!answer && field.default !== undefined) {
+        resolve(String(field.default));
+      } else {
+        resolve(answer);
+      }
+    });
+  });
+}
+
+/**
+ * Check if we're in an interactive terminal
+ */
+function isInteractive(): boolean {
+  return process.stdin.isTTY === true;
+}
+
+/**
+ * Gather user config values from stored config and environment
+ * Prompts for missing required values if interactive
+ */
+async function gatherUserConfigValues(
+  packageName: string,
+  userConfig: Record<string, UserConfigField>,
+  configManager: ConfigManager
+): Promise<Record<string, string>> {
+  const result: Record<string, string> = {};
+  const storedConfig = configManager.getPackageConfig(packageName) || {};
+  const missingRequired: Array<{ key: string; field: UserConfigField }> = [];
+
+  for (const [key, field] of Object.entries(userConfig)) {
+    // Priority: 1) stored config, 2) environment variable, 3) default value
+    const storedValue = storedConfig[key];
+    const envVarName = `MPAK_CONFIG_${key.toUpperCase()}`;
+    const envValue = process.env[envVarName];
+
+    if (storedValue !== undefined) {
+      result[key] = storedValue;
+    } else if (envValue !== undefined) {
+      result[key] = envValue;
+    } else if (field.default !== undefined) {
+      result[key] = String(field.default);
+    } else if (field.required) {
+      missingRequired.push({ key, field });
+    }
+  }
+
+  // Prompt for missing required values if interactive
+  if (missingRequired.length > 0) {
+    if (!isInteractive()) {
+      const missingKeys = missingRequired.map(m => m.key).join(', ');
+      process.stderr.write(`=> Error: Missing required config: ${missingKeys}\n`);
+      process.stderr.write(`=> Run 'mpak config set ${packageName} <key>=<value>' to set values\n`);
+      process.stderr.write(`=> Or set environment variables: ${missingRequired.map(m => `MPAK_CONFIG_${m.key.toUpperCase()}`).join(', ')}\n`);
+      process.exit(1);
+    }
+
+    process.stderr.write(`=> Package requires configuration:\n`);
+    for (const { key, field } of missingRequired) {
+      const value = await promptForValue(field, key);
+      if (!value && field.required) {
+        process.stderr.write(`=> Error: ${field.title || key} is required\n`);
+        process.exit(1);
+      }
+      result[key] = value;
+
+      // Offer to save the value
+      if (value) {
+        const rl = createInterface({
+          input: process.stdin,
+          output: process.stderr,
+          terminal: true,
+        });
+        await new Promise<void>((resolve) => {
+          rl.question(`=> Save ${field.title || key} for future runs? [Y/n]: `, (answer) => {
+            rl.close();
+            if (answer.toLowerCase() !== 'n') {
+              configManager.setPackageConfigValue(packageName, key, value);
+              process.stderr.write(`=> Saved to ~/.mpak/config.json\n`);
+            }
+            resolve();
+          });
+        });
+      }
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -206,9 +370,19 @@ export async function handleRun(
   const manifest = readManifest(cacheDir);
   const { type, entry_point, mcp_config } = manifest.server;
 
+  // Handle user_config substitution
+  let userConfigValues: Record<string, string> = {};
+  if (manifest.user_config && Object.keys(manifest.user_config).length > 0) {
+    const configManager = new ConfigManager();
+    userConfigValues = await gatherUserConfigValues(name, manifest.user_config, configManager);
+  }
+
+  // Substitute user_config placeholders in env vars
+  const substitutedEnv = substituteEnvVars(mcp_config.env, userConfigValues);
+
   let command: string;
   let args: string[];
-  let env: Record<string, string | undefined> = { ...process.env, ...mcp_config.env };
+  let env: Record<string, string | undefined> = { ...process.env, ...substitutedEnv };
 
   switch (type) {
     case 'binary': {

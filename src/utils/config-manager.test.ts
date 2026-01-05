@@ -57,4 +57,94 @@ describe('ConfigManager', () => {
     });
   });
 
+  describe('package config', () => {
+    it('should set and get package config value', () => {
+      const manager = new ConfigManager();
+      manager.setPackageConfigValue('@scope/name', 'api_key', 'test-value');
+
+      expect(manager.getPackageConfigValue('@scope/name', 'api_key')).toBe('test-value');
+    });
+
+    it('should return undefined for non-existent package', () => {
+      const manager = new ConfigManager();
+
+      expect(manager.getPackageConfig('@nonexistent/pkg')).toBeUndefined();
+    });
+
+    it('should return undefined for non-existent key', () => {
+      const manager = new ConfigManager();
+      manager.setPackageConfigValue('@scope/name', 'existing', 'value');
+
+      expect(manager.getPackageConfigValue('@scope/name', 'nonexistent')).toBeUndefined();
+    });
+
+    it('should get all package config', () => {
+      const manager = new ConfigManager();
+      manager.setPackageConfigValue('@scope/name', 'key1', 'value1');
+      manager.setPackageConfigValue('@scope/name', 'key2', 'value2');
+
+      const config = manager.getPackageConfig('@scope/name');
+      expect(config).toEqual({
+        key1: 'value1',
+        key2: 'value2',
+      });
+    });
+
+    it('should clear specific package config value', () => {
+      const manager = new ConfigManager();
+      manager.setPackageConfigValue('@scope/name', 'key1', 'value1');
+      manager.setPackageConfigValue('@scope/name', 'key2', 'value2');
+
+      const cleared = manager.clearPackageConfigValue('@scope/name', 'key1');
+      expect(cleared).toBe(true);
+      expect(manager.getPackageConfigValue('@scope/name', 'key1')).toBeUndefined();
+      expect(manager.getPackageConfigValue('@scope/name', 'key2')).toBe('value2');
+    });
+
+    it('should return false when clearing non-existent key', () => {
+      const manager = new ConfigManager();
+      manager.setPackageConfigValue('@scope/name', 'key1', 'value1');
+
+      const cleared = manager.clearPackageConfigValue('@scope/name', 'nonexistent');
+      expect(cleared).toBe(false);
+    });
+
+    it('should clear all package config', () => {
+      const manager = new ConfigManager();
+      manager.setPackageConfigValue('@scope/name', 'key1', 'value1');
+      manager.setPackageConfigValue('@scope/name', 'key2', 'value2');
+
+      const cleared = manager.clearPackageConfig('@scope/name');
+      expect(cleared).toBe(true);
+      expect(manager.getPackageConfig('@scope/name')).toBeUndefined();
+    });
+
+    it('should return false when clearing non-existent package', () => {
+      const manager = new ConfigManager();
+
+      const cleared = manager.clearPackageConfig('@nonexistent/pkg');
+      expect(cleared).toBe(false);
+    });
+
+    it('should list packages with config', () => {
+      const manager = new ConfigManager();
+      manager.setPackageConfigValue('@scope/pkg1', 'key', 'value');
+      manager.setPackageConfigValue('@scope/pkg2', 'key', 'value');
+
+      const packages = manager.listPackagesWithConfig();
+      expect(packages).toContain('@scope/pkg1');
+      expect(packages).toContain('@scope/pkg2');
+      expect(packages).toHaveLength(2);
+    });
+
+    it('should clean up empty package entry after clearing last key', () => {
+      const manager = new ConfigManager();
+      manager.setPackageConfigValue('@scope/name', 'only_key', 'value');
+      manager.clearPackageConfigValue('@scope/name', 'only_key');
+
+      expect(manager.getPackageConfig('@scope/name')).toBeUndefined();
+      expect(manager.listPackagesWithConfig()).not.toContain('@scope/name');
+    });
+  });
+
 });
