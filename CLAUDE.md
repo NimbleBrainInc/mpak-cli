@@ -155,27 +155,58 @@ Packages can declare `user_config` in their manifest for values like API keys:
 
 When `mpak run` executes, it substitutes `${user_config.*}` placeholders with actual values.
 
-### Value Resolution Priority
+### Two Ways to Provide Config
 
-1. **Stored config**: `~/.mpak/config.json` (set via `mpak config set`)
-2. **Environment variable**: `MPAK_CONFIG_<KEY>` (e.g., `MPAK_CONFIG_API_KEY`)
-3. **Default value**: From manifest's `user_config.*.default`
-4. **Interactive prompt**: If terminal is interactive and value is required
+#### Option 1: mpak config (recommended for CLI use)
 
-### Examples
+Use `mpak config set` with keys matching the manifest's `user_config` field names (not the env var names):
 
 ```bash
-# Pre-configure a package
+# Key is "api_key" (from manifest.user_config.api_key), NOT "IPINFO_API_TOKEN"
 mpak config set @nimblebraininc/ipinfo api_key=your_token
 
 # Run uses stored config automatically
 mpak run @nimblebraininc/ipinfo
 
-# Or use environment variable
-MPAK_CONFIG_API_KEY=your_token mpak run @nimblebraininc/ipinfo
-
 # View stored config (values masked)
 mpak config get @nimblebraininc/ipinfo
+```
+
+#### Option 2: Claude Desktop config (recommended for Claude Desktop)
+
+Set the actual environment variable directly in your Claude Desktop config:
+
+```json
+{
+  "mcpServers": {
+    "ipinfo": {
+      "command": "mpak",
+      "args": ["run", "@nimblebraininc/ipinfo"],
+      "env": {
+        "IPINFO_API_TOKEN": "your_token"
+      }
+    }
+  }
+}
+```
+
+This bypasses user_config substitution entirely since the env var is already set.
+
+### Value Resolution Priority
+
+1. **Process environment**: Env vars set by parent (e.g., Claude Desktop config)
+2. **Stored config**: `~/.mpak/config.json` (set via `mpak config set`)
+3. **Default value**: From manifest's `user_config.*.default`
+4. **Interactive prompt**: If terminal is interactive and value is required
+
+### Important: Config Key Names
+
+The `mpak config set` key must match the `user_config` field name in the manifest:
+
+```
+manifest.user_config.api_key  →  mpak config set ... api_key=xxx  →  env IPINFO_API_TOKEN
+                     ^^^^^^^                        ^^^^^^^
+                     Field name = config key (NOT the env var name)
 ```
 
 ## Design Decisions
