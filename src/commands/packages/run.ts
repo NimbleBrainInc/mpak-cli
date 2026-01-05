@@ -378,11 +378,12 @@ export async function handleRun(
   }
 
   // Substitute user_config placeholders in env vars
+  // Priority: process.env (from parent like Claude Desktop) > substituted values (from mpak config)
   const substitutedEnv = substituteEnvVars(mcp_config.env, userConfigValues);
 
   let command: string;
   let args: string[];
-  let env: Record<string, string | undefined> = { ...process.env, ...substitutedEnv };
+  let env: Record<string, string | undefined> = { ...substitutedEnv, ...process.env };
 
   switch (type) {
     case 'binary': {

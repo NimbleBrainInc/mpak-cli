@@ -206,4 +206,17 @@ describe('substituteEnvVars', () => {
     const env = { PATH: '/usr/bin', HOME: '/home/user' };
     expect(substituteEnvVars(env, {})).toEqual(env);
   });
+
+  it('leaves unsubstituted placeholders as-is', () => {
+    const env = {
+      API_KEY: '${user_config.api_key}',
+      DEBUG: 'true',
+    };
+    // api_key not provided, so placeholder remains
+    // (process.env will override this at merge time)
+    expect(substituteEnvVars(env, {})).toEqual({
+      API_KEY: '${user_config.api_key}',
+      DEBUG: 'true',
+    });
+  });
 });

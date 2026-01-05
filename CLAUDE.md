@@ -194,10 +194,14 @@ This bypasses user_config substitution entirely since the env var is already set
 
 ### Value Resolution Priority
 
-1. **Process environment**: Env vars set by parent (e.g., Claude Desktop config)
+For each env var defined in the manifest:
+
+1. **Process environment** (highest): Env vars set by parent (e.g., Claude Desktop config)
 2. **Stored config**: `~/.mpak/config.json` (set via `mpak config set`)
 3. **Default value**: From manifest's `user_config.*.default`
 4. **Interactive prompt**: If terminal is interactive and value is required
+
+This means Claude Desktop env vars always take priority over `mpak config` values.
 
 ### Important: Config Key Names
 
