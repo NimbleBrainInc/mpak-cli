@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { ConfigManager } from './config-manager.js';
-import { existsSync, rmSync } from 'fs';
+import { ConfigManager, ConfigCorruptedError } from './config-manager.js';
+import { existsSync, rmSync, writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 
@@ -144,6 +144,186 @@ describe('ConfigManager', () => {
 
       expect(manager.getPackageConfig('@scope/name')).toBeUndefined();
       expect(manager.listPackagesWithConfig()).not.toContain('@scope/name');
+    });
+  });
+
+  describe('config validation', () => {
+    beforeEach(() => {
+      // Ensure config directory exists for writing test files
+      if (!existsSync(testConfigDir)) {
+        mkdirSync(testConfigDir, { recursive: true, mode: 0o700 });
+      }
+    });
+
+    it('should throw ConfigCorruptedError for invalid JSON', () => {
+      writeFileSync(testConfigFile, 'not valid json {{{', { mode: 0o600 });
+
+      const manager = new ConfigManager();
+      expect(() => manager.loadConfig()).toThrow(ConfigCorruptedError);
+      expect(() => manager.loadConfig()).toThrow(/invalid JSON/);
+    });
+
+    it('should throw ConfigCorruptedError when version is missing', () => {
+      writeFileSync(
+        testConfigFile,
+        JSON.stringify({ lastUpdated: '2024-01-01T00:00:00Z' }),
+        { mode: 0o600 }
+      );
+
+      const manager = new ConfigManager();
+      expect(() => manager.loadConfig()).toThrow(ConfigCorruptedError);
+      expect(() => manager.loadConfig()).toThrow(/version/);
+    });
+
+    it('should throw ConfigCorruptedError when lastUpdated is missing', () => {
+      writeFileSync(
+        testConfigFile,
+        JSON.stringify({ version: '1.0.0' }),
+        { mode: 0o600 }
+      );
+
+      const manager = new ConfigManager();
+      expect(() => manager.loadConfig()).toThrow(ConfigCorruptedError);
+      expect(() => manager.loadConfig()).toThrow(/lastUpdated/);
+    });
+
+    it('should throw ConfigCorruptedError when registryUrl is not a string', () => {
+      writeFileSync(
+        testConfigFile,
+        JSON.stringify({
+          version: '1.0.0',
+          lastUpdated: '2024-01-01T00:00:00Z',
+          registryUrl: 12345,
+        }),
+        { mode: 0o600 }
+      );
+
+      const manager = new ConfigManager();
+      expect(() => manager.loadConfig()).toThrow(ConfigCorruptedError);
+      expect(() => manager.loadConfig()).toThrow(/registryUrl must be a string/);
+    });
+
+    it('should throw ConfigCorruptedError when packages is not an object', () => {
+      writeFileSync(
+        testConfigFile,
+        JSON.stringify({
+          version: '1.0.0',
+          lastUpdated: '2024-01-01T00:00:00Z',
+          packages: 'not an object',
+        }),
+        { mode: 0o600 }
+      );
+
+      const manager = new ConfigManager();
+      expect(() => manager.loadConfig()).toThrow(ConfigCorruptedError);
+      expect(() => manager.loadConfig()).toThrow(/packages must be an object/);
+    });
+
+    it('should throw ConfigCorruptedError when package config is not an object', () => {
+      writeFileSync(
+        testConfigFile,
+        JSON.stringify({
+          version: '1.0.0',
+          lastUpdated: '2024-01-01T00:00:00Z',
+          packages: {
+            '@scope/pkg': 'not an object',
+          },
+        }),
+        { mode: 0o600 }
+      );
+
+      const manager = new ConfigManager();
+      expect(() => manager.loadConfig()).toThrow(ConfigCorruptedError);
+      expect(() => manager.loadConfig()).toThrow(/packages.@scope\/pkg must be an object/);
+    });
+
+    it('should throw ConfigCorruptedError when package config value is not a string', () => {
+      writeFileSync(
+        testConfigFile,
+        JSON.stringify({
+          version: '1.0.0',
+          lastUpdated: '2024-01-01T00:00:00Z',
+          packages: {
+            '@scope/pkg': {
+              api_key: 12345,
+            },
+          },
+        }),
+        { mode: 0o600 }
+      );
+
+      const manager = new ConfigManager();
+      expect(() => manager.loadConfig()).toThrow(ConfigCorruptedError);
+      expect(() => manager.loadConfig()).toThrow(/packages.@scope\/pkg.api_key must be a string/);
+    });
+
+    it('should throw ConfigCorruptedError for unknown fields', () => {
+      writeFileSync(
+        testConfigFile,
+        JSON.stringify({
+          version: '1.0.0',
+          lastUpdated: '2024-01-01T00:00:00Z',
+          unknownField: 'should not be here',
+        }),
+        { mode: 0o600 }
+      );
+
+      const manager = new ConfigManager();
+      expect(() => manager.loadConfig()).toThrow(ConfigCorruptedError);
+      expect(() => manager.loadConfig()).toThrow(/unknown field: unknownField/);
+    });
+
+    it('should include config path in error', () => {
+      writeFileSync(testConfigFile, 'invalid json', { mode: 0o600 });
+
+      const manager = new ConfigManager();
+      try {
+        manager.loadConfig();
+        expect.fail('Should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(ConfigCorruptedError);
+        expect((err as ConfigCorruptedError).configPath).toBe(testConfigFile);
+      }
+    });
+
+    it('should load valid minimal config', () => {
+      writeFileSync(
+        testConfigFile,
+        JSON.stringify({
+          version: '1.0.0',
+          lastUpdated: '2024-01-01T00:00:00Z',
+        }),
+        { mode: 0o600 }
+      );
+
+      const manager = new ConfigManager();
+      const config = manager.loadConfig();
+      expect(config.version).toBe('1.0.0');
+      expect(config.lastUpdated).toBe('2024-01-01T00:00:00Z');
+    });
+
+    it('should load valid full config', () => {
+      writeFileSync(
+        testConfigFile,
+        JSON.stringify({
+          version: '1.0.0',
+          lastUpdated: '2024-01-01T00:00:00Z',
+          registryUrl: 'https://custom.registry.com',
+          packages: {
+            '@scope/pkg': {
+              api_key: 'secret',
+              other_key: 'value',
+            },
+          },
+        }),
+        { mode: 0o600 }
+      );
+
+      const manager = new ConfigManager();
+      const config = manager.loadConfig();
+      expect(config.version).toBe('1.0.0');
+      expect(config.registryUrl).toBe('https://custom.registry.com');
+      expect(config.packages?.['@scope/pkg']?.api_key).toBe('secret');
     });
   });
 
