@@ -3,6 +3,11 @@ import { homedir } from 'os';
 import { join } from 'path';
 
 /**
+ * Current config schema version
+ */
+export const CONFIG_VERSION = '1.0.0';
+
+/**
  * Per-package user configuration (stores user_config values)
  */
 export interface PackageConfig {
@@ -10,13 +15,109 @@ export interface PackageConfig {
 }
 
 /**
- * Configuration structure
+ * Configuration structure (v1.0.0)
  */
 export interface MpakConfig {
   version: string;
   lastUpdated: string;
   registryUrl?: string;
   packages?: Record<string, PackageConfig>;
+}
+
+/**
+ * Error thrown when config file is corrupted or invalid
+ */
+export class ConfigCorruptedError extends Error {
+  constructor(
+    message: string,
+    public readonly configPath: string,
+    public readonly cause?: Error
+  ) {
+    super(message);
+    this.name = 'ConfigCorruptedError';
+  }
+}
+
+/**
+ * Validates that a parsed object conforms to the MpakConfig schema
+ */
+function validateConfig(data: unknown, configPath: string): MpakConfig {
+  if (typeof data !== 'object' || data === null) {
+    throw new ConfigCorruptedError(
+      'Config file must be a JSON object',
+      configPath
+    );
+  }
+
+  const obj = data as Record<string, unknown>;
+
+  // Required fields
+  if (typeof obj.version !== 'string') {
+    throw new ConfigCorruptedError(
+      'Config missing required field: version (string)',
+      configPath
+    );
+  }
+
+  if (typeof obj.lastUpdated !== 'string') {
+    throw new ConfigCorruptedError(
+      'Config missing required field: lastUpdated (string)',
+      configPath
+    );
+  }
+
+  // Optional fields with type validation
+  if (obj.registryUrl !== undefined && typeof obj.registryUrl !== 'string') {
+    throw new ConfigCorruptedError(
+      'Config field registryUrl must be a string',
+      configPath
+    );
+  }
+
+  if (obj.packages !== undefined) {
+    if (typeof obj.packages !== 'object' || obj.packages === null) {
+      throw new ConfigCorruptedError(
+        'Config field packages must be an object',
+        configPath
+      );
+    }
+
+    // Validate each package config
+    for (const [pkgName, pkgConfig] of Object.entries(
+      obj.packages as Record<string, unknown>
+    )) {
+      if (typeof pkgConfig !== 'object' || pkgConfig === null) {
+        throw new ConfigCorruptedError(
+          `Config packages.${pkgName} must be an object`,
+          configPath
+        );
+      }
+
+      for (const [key, value] of Object.entries(
+        pkgConfig as Record<string, unknown>
+      )) {
+        if (typeof value !== 'string') {
+          throw new ConfigCorruptedError(
+            `Config packages.${pkgName}.${key} must be a string`,
+            configPath
+          );
+        }
+      }
+    }
+  }
+
+  // Check for unknown fields (additionalProperties: false in schema)
+  const knownFields = new Set(['version', 'lastUpdated', 'registryUrl', 'packages']);
+  for (const key of Object.keys(obj)) {
+    if (!knownFields.has(key)) {
+      throw new ConfigCorruptedError(
+        `Config contains unknown field: ${key}`,
+        configPath
+      );
+    }
+  }
+
+  return data as MpakConfig;
 }
 
 /**
@@ -46,25 +147,38 @@ export class ConfigManager {
 
     if (!existsSync(this.configFile)) {
       this.config = {
-        version: '1.0.0',
+        version: CONFIG_VERSION,
         lastUpdated: new Date().toISOString(),
       };
       this.saveConfig();
       return this.config;
     }
 
+    let configJson: string;
     try {
-      const configJson = readFileSync(this.configFile, 'utf8');
-      this.config = JSON.parse(configJson) as MpakConfig;
-      return this.config;
-    } catch {
-      this.config = {
-        version: '1.0.0',
-        lastUpdated: new Date().toISOString(),
-      };
-      this.saveConfig();
-      return this.config;
+      configJson = readFileSync(this.configFile, 'utf8');
+    } catch (err) {
+      throw new ConfigCorruptedError(
+        `Failed to read config file: ${err instanceof Error ? err.message : String(err)}`,
+        this.configFile,
+        err instanceof Error ? err : undefined
+      );
     }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(configJson);
+    } catch (err) {
+      throw new ConfigCorruptedError(
+        `Config file contains invalid JSON: ${err instanceof Error ? err.message : String(err)}`,
+        this.configFile,
+        err instanceof Error ? err : undefined
+      );
+    }
+
+    // Validate structure against schema
+    this.config = validateConfig(parsed, this.configFile);
+    return this.config;
   }
 
   private saveConfig(): void {
