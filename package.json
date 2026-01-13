@@ -37,9 +37,13 @@
     "node": ">=18"
   },
   "dependencies": {
-    "commander": "^14.0.2"
+    "archiver": "^7.0.1",
+    "commander": "^14.0.2",
+    "gray-matter": "^4.0.3",
+    "zod": "^4.3.5"
   },
   "devDependencies": {
+    "@types/archiver": "^7.0.0",
     "@types/node": "^25.0.3",
     "@vitest/ui": "^4.0.16",
     "openapi-typescript": "^7.10.1",

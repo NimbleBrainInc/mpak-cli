@@ -1,6 +1,6 @@
 # mpak CLI
 
-CLI for discovering and downloading MCPB bundles from the mpak registry.
+CLI for MCP bundles and Agent Skills.
 
 ## Architecture
 
@@ -11,14 +11,23 @@ This is a standalone CLI that uses only the public v1 API. It has no dependencie
 | File | Purpose |
 |------|---------|
 | `src/program.ts` | Commander program setup with all commands |
-| `src/lib/api/registry-client.ts` | API client for v1 endpoints |
+| `src/lib/api/registry-client.ts` | API client for bundle endpoints |
+| `src/lib/api/skills-client.ts` | API client for skill endpoints |
 | `src/lib/api/schema.d.ts` | Generated types from OpenAPI spec |
-| `src/commands/packages/search.ts` | Search command implementation |
-| `src/commands/packages/show.ts` | Show/info command implementation |
-| `src/commands/packages/pull.ts` | Pull/install command implementation |
-| `src/commands/packages/run.ts` | Run command implementation (caching, extraction, execution, user_config substitution) |
+| `src/commands/packages/*.ts` | Bundle commands (search, show, pull, run) |
+| `src/commands/skills/*.ts` | Skill commands (validate, pack, search, show, pull, install, list) |
 | `src/commands/config.ts` | Config commands (set, get, list, clear) |
+| `src/schemas/generated/skill.ts` | Skill validation schemas (Zod) |
 | `src/utils/config-manager.ts` | Config file handling (~/.mpak/config.json) |
+
+### Command Structure
+
+```
+mpak search <query>     # Unified search (bundles + skills)
+mpak bundle <command>   # MCP bundle operations
+mpak skill <command>    # Agent skill operations
+mpak config <command>   # Configuration management
+```
 
 ### Type Generation
 
@@ -44,7 +53,7 @@ export type Bundle = BundleSearchResponse['bundles'][number];
 
 ## v1 API Endpoints
 
-The CLI uses these public endpoints:
+### Bundle Endpoints
 
 | Endpoint | Description |
 |----------|-------------|
@@ -52,9 +61,18 @@ The CLI uses these public endpoints:
 | `GET /v1/bundles/@{scope}/{package}` | Get bundle details (metadata, readme) |
 | `GET /v1/bundles/@{scope}/{package}/versions` | List versions with platform availability |
 | `GET /v1/bundles/@{scope}/{package}/versions/{version}/download` | Get download URL for specific version/platform |
-| `GET /v1/bundles/@{scope}/{package}/versions/latest/download` | Get download URL for latest version |
 
-### Platform Selection
+### Skill Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /v1/skills/search` | Search skills by query, tags, category |
+| `GET /v1/skills/@{scope}/{name}` | Get skill details |
+| `GET /v1/skills/@{scope}/{name}/download` | Get download URL for latest version |
+| `GET /v1/skills/@{scope}/{name}/versions/{version}/download` | Get download URL for specific version |
+| `POST /v1/skills/announce` | Announce skill version (OIDC auth) |
+
+### Platform Selection (Bundles)
 
 Download endpoints accept `os` and `arch` query parameters:
 - `os`: darwin, linux, win32, any
@@ -80,12 +98,12 @@ npm run build
 The CLI defaults to `https://api.mpak.dev`. For local development:
 
 ```bash
-# Start the server (from ../server)
-cd ../server && npm run dev
+# Start the server (from ../mpak/server)
+cd ../mpak/server && npm run dev
 
 # Run CLI commands with local registry
-MPAK_REGISTRY_URL=http://localhost:3200 npm run dev -- search echo
-MPAK_REGISTRY_URL=http://localhost:3200 node dist/index.js pull @nimblebraininc/echo
+MPAK_REGISTRY_URL=http://localhost:3200 npm run dev -- bundle search echo
+MPAK_REGISTRY_URL=http://localhost:3200 node dist/index.js skill search strategy
 ```
 
 ### Verification
@@ -114,20 +132,45 @@ npm publish --otp=<code>
 git push && git push --tags
 ```
 
-## Commands (MVP)
+## Commands
+
+### Unified Search
 
 | Command | Description |
 |---------|-------------|
-| `search <query>` | Search public bundles |
-| `show <package>` | Show bundle details with platforms |
-| `info <package>` | Alias for show |
-| `pull <package>` | Download a bundle |
-| `install <package>` | Alias for pull |
-| `run <package>` | Run an MCP server (pulls, caches, executes) |
-| `config set <pkg> <k=v...>` | Store config values for a package |
-| `config get <pkg>` | Show stored config (values masked) |
-| `config list` | List packages with stored config |
-| `config clear <pkg> [key]` | Clear stored config |
+| `mpak search <query>` | Search bundles and skills |
+| `mpak search <query> --type bundle` | Search bundles only |
+| `mpak search <query> --type skill` | Search skills only |
+
+### Bundle Commands
+
+| Command | Description |
+|---------|-------------|
+| `mpak bundle search <query>` | Search public bundles |
+| `mpak bundle show <package>` | Show bundle details with platforms |
+| `mpak bundle pull <package>` | Download a bundle |
+| `mpak bundle run <package>` | Run an MCP server (pulls, caches, executes) |
+
+### Skill Commands
+
+| Command | Description |
+|---------|-------------|
+| `mpak skill validate <path>` | Validate skill directory against Agent Skills spec |
+| `mpak skill pack <path>` | Create a .skill bundle |
+| `mpak skill search <query>` | Search skills in registry |
+| `mpak skill show <name>` | Show skill details |
+| `mpak skill pull <name>` | Download a .skill bundle |
+| `mpak skill install <name>` | Install to ~/.claude/skills/ |
+| `mpak skill list` | List installed skills |
+
+### Config Commands
+
+| Command | Description |
+|---------|-------------|
+| `mpak config set <pkg> <k=v...>` | Store config values for a package |
+| `mpak config get <pkg>` | Show stored config (values masked) |
+| `mpak config list` | List packages with stored config |
+| `mpak config clear <pkg> [key]` | Clear stored config |
 
 ## User Config (MCPB v0.3)
 
@@ -153,7 +196,7 @@ Packages can declare `user_config` in their manifest for values like API keys:
 }
 ```
 
-When `mpak run` executes, it substitutes `${user_config.*}` placeholders with actual values.
+When `mpak bundle run` executes, it substitutes `${user_config.*}` placeholders with actual values.
 
 ### Two Ways to Provide Config
 
@@ -166,7 +209,7 @@ Use `mpak config set` with keys matching the manifest's `user_config` field name
 mpak config set @nimblebraininc/ipinfo api_key=your_token
 
 # Run uses stored config automatically
-mpak run @nimblebraininc/ipinfo
+mpak bundle run @nimblebraininc/ipinfo
 
 # View stored config (values masked)
 mpak config get @nimblebraininc/ipinfo
@@ -181,7 +224,7 @@ Set the actual environment variable directly in your Claude Desktop config:
   "mcpServers": {
     "ipinfo": {
       "command": "mpak",
-      "args": ["run", "@nimblebraininc/ipinfo"],
+      "args": ["bundle", "run", "@nimblebraininc/ipinfo"],
       "env": {
         "IPINFO_API_TOKEN": "your_token"
       }
@@ -214,9 +257,10 @@ manifest.user_config.api_key  →  mpak config set ... api_key=xxx  →  env IPI
 ## Design Decisions
 
 1. **Standalone**: No shared dependencies with server/client. Types generated from OpenAPI.
-2. **Public API only**: MVP uses only v1 API. Publishing requires separate tooling.
+2. **Public API only**: Uses v1 API. Publishing requires OIDC via GitHub Actions.
 3. **Platform detection**: Auto-detects OS/arch, allows explicit override for cross-platform downloads.
 4. **Config file**: Stores registry URL in `~/.mpak/config.json`, overridable via `MPAK_REGISTRY_URL`.
+5. **Skill schemas**: Uses Zod schemas in `src/schemas/generated/skill.ts` for validation.
 
 ## Gotchas
 
@@ -224,9 +268,4 @@ manifest.user_config.api_key  →  mpak config set ... api_key=xxx  →  env IPI
 - **Type generation**: Requires server running locally (`npm run generate:types` hits localhost:3200)
 - **Schema changes**: May introduce breaking type changes; always run full verification after regenerating
 - **Env merge order**: Use `{ ...substitutedEnv, ...process.env }` so parent env vars (Claude Desktop) take priority over manifest substitutions
-
-## Future Considerations
-
-- The CLI will be broken out into a completely standalone repository
-- Authentication commands (login, publish) may be added when needed
-- Consider adding `npx` support for zero-install usage
+- **Skill endpoints**: Currently implemented in server code but may not be deployed to production yet

@@ -1,26 +1,66 @@
 import { Command } from 'commander';
 import { getVersion } from './utils/version.js';
+import { handleUnifiedSearch } from './commands/search.js';
 import { handleSearch } from './commands/packages/search.js';
 import { handleShow } from './commands/packages/show.js';
 import { handlePull } from './commands/packages/pull.js';
 import { handleRun } from './commands/packages/run.js';
-import { handleConfigSet, handleConfigGet, handleConfigList, handleConfigClear } from './commands/config.js';
+import {
+  handleConfigSet,
+  handleConfigGet,
+  handleConfigList,
+  handleConfigClear,
+} from './commands/config.js';
+import {
+  handleSkillValidate,
+  handleSkillPack,
+  handleSkillSearch,
+  handleSkillShow,
+  handleSkillPull,
+  handleSkillInstall,
+  handleSkillList,
+} from './commands/skills/index.js';
 
 /**
  * Creates and configures the CLI program
  *
- * MVP: Unauthenticated commands only (v1 API)
+ * Command structure:
+ * - mpak search <query>    - Unified search (bundles + skills)
+ * - mpak bundle <command>  - MCP bundle commands
+ * - mpak skill <command>   - Agent skill commands
+ * - mpak config <command>  - Configuration commands
  */
 export function createProgram(): Command {
   const program = new Command();
 
   program
     .name('mpak')
-    .description('CLI for downloading MCPB bundles from the package directory')
+    .description('CLI for MCP bundles and Agent Skills')
     .version(getVersion(), '-v, --version', 'Output the current version');
 
-  // Search command
+  // ==========================================================================
+  // Unified search (bundles + skills)
+  // ==========================================================================
+
   program
+    .command('search <query>')
+    .description('Search bundles and skills')
+    .option('--type <type>', 'Filter by type (bundle, skill)')
+    .option('--sort <field>', 'Sort by: downloads, recent, name')
+    .option('--limit <number>', 'Limit results', parseInt)
+    .option('--offset <number>', 'Pagination offset', parseInt)
+    .option('--json', 'Output as JSON')
+    .action(async (query, options) => {
+      await handleUnifiedSearch(query, options);
+    });
+
+  // ==========================================================================
+  // Bundle namespace (MCP bundles)
+  // ==========================================================================
+
+  const bundle = program.command('bundle').description('MCP bundle commands');
+
+  bundle
     .command('search <query>')
     .description('Search public bundles')
     .option('--type <type>', 'Filter by server type (node, python, binary)')
@@ -32,8 +72,7 @@ export function createProgram(): Command {
       await handleSearch(query, options);
     });
 
-  // Show command
-  program
+  bundle
     .command('show <package>')
     .description('Show detailed information about a bundle')
     .option('--json', 'Output as JSON')
@@ -41,19 +80,9 @@ export function createProgram(): Command {
       await handleShow(packageName, options);
     });
 
-  // Info command (alias for show)
-  program
-    .command('info <package>')
-    .description('Show detailed information about a bundle (alias for show)')
-    .option('--json', 'Output as JSON')
-    .action(async (packageName, options) => {
-      await handleShow(packageName, options);
-    });
-
-  // Pull command
-  program
+  bundle
     .command('pull <package>')
-    .description('Download a bundle from the registry (e.g., @scope/name or @scope/name@1.0.0)')
+    .description('Download a bundle from the registry')
     .option('-o, --output <path>', 'Output file path')
     .option('--os <os>', 'Target OS (darwin, linux, win32)')
     .option('--arch <arch>', 'Target architecture (x64, arm64)')
@@ -62,35 +91,96 @@ export function createProgram(): Command {
       await handlePull(packageSpec, options);
     });
 
-  // Install command (alias for pull)
-  program
-    .command('install <package>')
-    .description('Download a bundle from the registry (alias for pull)')
-    .option('-o, --output <path>', 'Output file path')
-    .option('--os <os>', 'Target OS (darwin, linux, win32)')
-    .option('--arch <arch>', 'Target architecture (x64, arm64)')
-    .option('--json', 'Output download info as JSON')
-    .action(async (packageSpec, options) => {
-      await handlePull(packageSpec, options);
-    });
-
-  // Run command
-  program
+  bundle
     .command('run <package>')
-    .description('Run an MCP server from the registry (e.g., @scope/name or @scope/name@1.0.0)')
+    .description('Run an MCP server from the registry')
     .option('--update', 'Force re-download even if cached')
     .action(async (packageSpec, options) => {
       await handleRun(packageSpec, options);
     });
 
-  // Config command group
+  // ==========================================================================
+  // Skill namespace (Agent Skills)
+  // ==========================================================================
+
+  const skill = program.command('skill').description('Agent skill commands');
+
+  skill
+    .command('validate <path>')
+    .description('Validate a skill directory against the Agent Skills spec')
+    .option('--json', 'Output as JSON')
+    .action(async (path, options) => {
+      await handleSkillValidate(path, options);
+    });
+
+  skill
+    .command('pack <path>')
+    .description('Create a .skill bundle from a skill directory')
+    .option('-o, --output <path>', 'Output file path')
+    .option('--json', 'Output as JSON')
+    .action(async (path, options) => {
+      await handleSkillPack(path, options);
+    });
+
+  skill
+    .command('search <query>')
+    .description('Search skills in the registry')
+    .option('--tags <tags>', 'Filter by tags (comma-separated)')
+    .option('--category <category>', 'Filter by category')
+    .option('--surface <surface>', 'Filter by surface (claude-code, claude-api, claude-ai)')
+    .option('--sort <field>', 'Sort by: downloads, recent, name')
+    .option('--limit <number>', 'Limit results', parseInt)
+    .option('--offset <number>', 'Pagination offset', parseInt)
+    .option('--json', 'Output as JSON')
+    .action(async (query, options) => {
+      await handleSkillSearch(query, options);
+    });
+
+  skill
+    .command('show <name>')
+    .description('Show detailed information about a skill')
+    .option('--json', 'Output as JSON')
+    .action(async (name, options) => {
+      await handleSkillShow(name, options);
+    });
+
+  skill
+    .command('pull <name>')
+    .description('Download a .skill bundle from the registry')
+    .option('-o, --output <path>', 'Output file path')
+    .option('--json', 'Output as JSON')
+    .action(async (name, options) => {
+      await handleSkillPull(name, options);
+    });
+
+  skill
+    .command('install <name>')
+    .description('Install a skill to ~/.claude/skills/')
+    .option('--force', 'Overwrite existing installation')
+    .option('--json', 'Output as JSON')
+    .action(async (name, options) => {
+      await handleSkillInstall(name, options);
+    });
+
+  skill
+    .command('list')
+    .description('List installed skills')
+    .option('--json', 'Output as JSON')
+    .action(async (options) => {
+      await handleSkillList(options);
+    });
+
+  // ==========================================================================
+  // Config commands (shared for bundles and skills)
+  // ==========================================================================
+
   const configCmd = program
     .command('config')
     .description('Manage per-package configuration values');
 
   configCmd
     .command('set <package> <key=value...>')
-    .description('Set config value(s) for a package (e.g., mpak config set @scope/name api_key=xxx)')
+    .description('Set config value(s) for a package')
     .action(async (packageName, keyValuePairs) => {
       await handleConfigSet(packageName, keyValuePairs);
     });
