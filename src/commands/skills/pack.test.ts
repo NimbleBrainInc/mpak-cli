@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdirSync, writeFileSync, rmSync, existsSync, readFileSync } from 'fs';
+import { mkdirSync, writeFileSync, rmSync, existsSync } from 'fs';
 import { join, basename } from 'path';
 import { tmpdir } from 'os';
 import { packSkill } from './pack.js';
