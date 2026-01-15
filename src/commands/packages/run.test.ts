@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { homedir } from 'os';
 import { join } from 'path';
-import { parsePackageSpec, getCacheDir, resolveArgs, substituteUserConfig, substituteEnvVars } from './run.js';
+import { parsePackageSpec, getCacheDir, resolveArgs, substituteUserConfig, substituteEnvVars, getLocalCacheDir, localBundleNeedsExtract } from './run.js';
 
 describe('parsePackageSpec', () => {
   describe('scoped packages', () => {
@@ -218,5 +218,44 @@ describe('substituteEnvVars', () => {
       API_KEY: '${user_config.api_key}',
       DEBUG: 'true',
     });
+  });
+});
+
+describe('getLocalCacheDir', () => {
+  const expectedBase = join(homedir(), '.mpak', 'cache', '_local');
+
+  it('returns consistent hash for same path', () => {
+    const dir1 = getLocalCacheDir('/path/to/bundle.mcpb');
+    const dir2 = getLocalCacheDir('/path/to/bundle.mcpb');
+    expect(dir1).toBe(dir2);
+  });
+
+  it('returns different hash for different paths', () => {
+    const dir1 = getLocalCacheDir('/path/to/bundle1.mcpb');
+    const dir2 = getLocalCacheDir('/path/to/bundle2.mcpb');
+    expect(dir1).not.toBe(dir2);
+  });
+
+  it('includes _local in path', () => {
+    const dir = getLocalCacheDir('/path/to/bundle.mcpb');
+    expect(dir).toContain('_local');
+    expect(dir.startsWith(expectedBase)).toBe(true);
+  });
+
+  it('produces a 12-character hash suffix', () => {
+    const dir = getLocalCacheDir('/path/to/bundle.mcpb');
+    const hashPart = dir.split('/').pop();
+    expect(hashPart).toHaveLength(12);
+  });
+});
+
+describe('localBundleNeedsExtract', () => {
+  it('returns true when cache directory does not exist', () => {
+    expect(localBundleNeedsExtract('/any/path.mcpb', '/nonexistent/cache')).toBe(true);
+  });
+
+  it('returns true when meta file does not exist in cache dir', () => {
+    // Using a directory that exists but has no .mpak-meta.json
+    expect(localBundleNeedsExtract('/any/path.mcpb', '/tmp')).toBe(true);
   });
 });

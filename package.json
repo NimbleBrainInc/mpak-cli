@@ -1,6 +1,6 @@
 {
   "name": "@nimblebrain/mpak",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "description": "CLI for downloading MCPB bundles from the mpak registry",
   "main": "dist/index.js",
   "type": "module",

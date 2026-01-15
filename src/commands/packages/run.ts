@@ -1,13 +1,15 @@
 import { spawn, spawnSync } from 'child_process';
 import { createInterface } from 'readline';
-import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync, rmSync, statSync } from 'fs';
+import { createHash } from 'crypto';
 import { homedir } from 'os';
-import { join, dirname } from 'path';
+import { join, dirname, resolve, basename } from 'path';
 import { RegistryClient } from '../../lib/api/registry-client.js';
 import { ConfigManager } from '../../utils/config-manager.js';
 
 export interface RunOptions {
   update?: boolean;
+  local?: string;  // Path to local .mcpb file
 }
 
 interface McpConfig {
@@ -170,6 +172,33 @@ export function substituteEnvVars(
 }
 
 /**
+ * Get cache directory for a local bundle.
+ * Uses hash of absolute path to avoid collisions.
+ */
+export function getLocalCacheDir(bundlePath: string): string {
+  const absolutePath = resolve(bundlePath);
+  const hash = createHash('md5').update(absolutePath).digest('hex').slice(0, 12);
+  return join(homedir(), '.mpak', 'cache', '_local', hash);
+}
+
+/**
+ * Check if local bundle needs re-extraction.
+ * Returns true if cache doesn't exist or bundle was modified after extraction.
+ */
+export function localBundleNeedsExtract(bundlePath: string, cacheDir: string): boolean {
+  const metaPath = join(cacheDir, '.mpak-meta.json');
+  if (!existsSync(metaPath)) return true;
+
+  try {
+    const meta = JSON.parse(readFileSync(metaPath, 'utf8'));
+    const bundleStat = statSync(bundlePath);
+    return bundleStat.mtimeMs > new Date(meta.extractedAt).getTime();
+  } catch {
+    return true;
+  }
+}
+
+/**
  * Prompt user for a config value (interactive terminal input)
  */
 async function promptForValue(
@@ -295,69 +324,125 @@ function findPythonCommand(): string {
 }
 
 /**
- * Run a package from the registry
+ * Run a package from the registry or a local bundle file
  */
 export async function handleRun(
   packageSpec: string,
   options: RunOptions = {}
 ): Promise<void> {
-  const { name, version: requestedVersion } = parsePackageSpec(packageSpec);
-  const client = new RegistryClient();
-  const platform = RegistryClient.detectPlatform();
-  const cacheDir = getCacheDir(name);
-
-  let needsPull = true;
-  let cachedMeta = getCacheMetadata(cacheDir);
-
-  // Check if we have a cached version
-  if (cachedMeta && !options.update) {
-    if (requestedVersion) {
-      // Specific version requested - check if cached version matches
-      needsPull = cachedMeta.version !== requestedVersion;
-    } else {
-      // Latest requested - use cache (user can --update to refresh)
-      needsPull = false;
-    }
+  // Validate that either --local or package spec is provided
+  if (!options.local && !packageSpec) {
+    process.stderr.write(`=> Error: Either provide a package name or use --local <path>\n`);
+    process.exit(1);
   }
 
-  if (needsPull) {
-    // Fetch download info
-    const downloadInfo = await client.getDownloadInfo(name, requestedVersion, platform);
-    const bundle = downloadInfo.bundle;
+  let cacheDir: string;
+  let packageName: string;
 
-    // Check if cached version is already the latest
-    if (cachedMeta && cachedMeta.version === bundle.version && !options.update) {
-      needsPull = false;
+  if (options.local) {
+    // === LOCAL BUNDLE MODE ===
+    const bundlePath = resolve(options.local);
+
+    // Validate bundle exists
+    if (!existsSync(bundlePath)) {
+      process.stderr.write(`=> Error: Bundle not found: ${bundlePath}\n`);
+      process.exit(1);
     }
 
-    if (needsPull) {
-      // Download to temp file
-      const tempPath = join(homedir(), '.mpak', 'tmp', `${Date.now()}.mcpb`);
-      mkdirSync(dirname(tempPath), { recursive: true });
+    // Validate .mcpb extension
+    if (!bundlePath.endsWith('.mcpb')) {
+      process.stderr.write(`=> Error: Not an MCPB bundle: ${bundlePath}\n`);
+      process.exit(1);
+    }
 
-      process.stderr.write(`=> Pulling ${name}@${bundle.version}...\n`);
-      await client.downloadBundle(downloadInfo.url, tempPath);
+    cacheDir = getLocalCacheDir(bundlePath);
+    const needsExtract = options.update || localBundleNeedsExtract(bundlePath, cacheDir);
 
-      // Clear old cache and extract
-      const { rmSync } = await import('fs');
+    if (needsExtract) {
+      // Clear old extraction
       if (existsSync(cacheDir)) {
         rmSync(cacheDir, { recursive: true, force: true });
       }
       mkdirSync(cacheDir, { recursive: true });
 
-      await extractZip(tempPath, cacheDir);
+      process.stderr.write(`=> Extracting ${basename(bundlePath)}...\n`);
+      await extractZip(bundlePath, cacheDir);
 
-      // Write metadata
-      writeCacheMetadata(cacheDir, {
-        version: bundle.version,
-        pulledAt: new Date().toISOString(),
-        platform: bundle.platform,
-      });
+      // Write local metadata
+      writeFileSync(
+        join(cacheDir, '.mpak-meta.json'),
+        JSON.stringify({
+          localPath: bundlePath,
+          extractedAt: new Date().toISOString(),
+        })
+      );
+    }
 
-      // Cleanup temp file
-      rmSync(tempPath, { force: true });
+    // Read manifest to get package name for config lookup
+    const manifest = readManifest(cacheDir);
+    packageName = manifest.name;
+    process.stderr.write(`=> Running ${packageName} (local)\n`);
 
-      process.stderr.write(`=> Cached ${name}@${bundle.version}\n`);
+  } else {
+    // === REGISTRY MODE ===
+    const { name, version: requestedVersion } = parsePackageSpec(packageSpec);
+    packageName = name;
+    const client = new RegistryClient();
+    const platform = RegistryClient.detectPlatform();
+    cacheDir = getCacheDir(name);
+
+    let needsPull = true;
+    let cachedMeta = getCacheMetadata(cacheDir);
+
+    // Check if we have a cached version
+    if (cachedMeta && !options.update) {
+      if (requestedVersion) {
+        // Specific version requested - check if cached version matches
+        needsPull = cachedMeta.version !== requestedVersion;
+      } else {
+        // Latest requested - use cache (user can --update to refresh)
+        needsPull = false;
+      }
+    }
+
+    if (needsPull) {
+      // Fetch download info
+      const downloadInfo = await client.getDownloadInfo(name, requestedVersion, platform);
+      const bundle = downloadInfo.bundle;
+
+      // Check if cached version is already the latest
+      if (cachedMeta && cachedMeta.version === bundle.version && !options.update) {
+        needsPull = false;
+      }
+
+      if (needsPull) {
+        // Download to temp file
+        const tempPath = join(homedir(), '.mpak', 'tmp', `${Date.now()}.mcpb`);
+        mkdirSync(dirname(tempPath), { recursive: true });
+
+        process.stderr.write(`=> Pulling ${name}@${bundle.version}...\n`);
+        await client.downloadBundle(downloadInfo.url, tempPath);
+
+        // Clear old cache and extract
+        if (existsSync(cacheDir)) {
+          rmSync(cacheDir, { recursive: true, force: true });
+        }
+        mkdirSync(cacheDir, { recursive: true });
+
+        await extractZip(tempPath, cacheDir);
+
+        // Write metadata
+        writeCacheMetadata(cacheDir, {
+          version: bundle.version,
+          pulledAt: new Date().toISOString(),
+          platform: bundle.platform,
+        });
+
+        // Cleanup temp file
+        rmSync(tempPath, { force: true });
+
+        process.stderr.write(`=> Cached ${name}@${bundle.version}\n`);
+      }
     }
   }
 
@@ -369,7 +454,7 @@ export async function handleRun(
   let userConfigValues: Record<string, string> = {};
   if (manifest.user_config && Object.keys(manifest.user_config).length > 0) {
     const configManager = new ConfigManager();
-    userConfigValues = await gatherUserConfigValues(name, manifest.user_config, configManager);
+    userConfigValues = await gatherUserConfigValues(packageName, manifest.user_config, configManager);
   }
 
   // Substitute user_config placeholders in env vars

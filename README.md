@@ -21,17 +21,32 @@ npm install -g @nimblebrain/mpak
 # Search for everything (bundles + skills)
 mpak search postgres
 
-# Search bundles only
-mpak bundle search postgres
-
 # Run an MCP server
-mpak bundle run @owner/my-server
+mpak run @owner/my-server
 
 # Search skills only
 mpak skill search strategy
 
 # Install a skill
 mpak skill install @owner/my-skill
+```
+
+## Claude Code Integration
+
+Add any mpak bundle to Claude Code with a single command:
+
+```bash
+claude mcp add --transport stdio echo -- mpak run @nimblebraininc/echo
+```
+
+For bundles requiring API keys:
+
+```bash
+# Set config once
+mpak config set @nimblebraininc/ipinfo api_key=your_token
+
+# Then add to Claude Code
+claude mcp add --transport stdio ipinfo -- mpak run @nimblebraininc/ipinfo
 ```
 
 ## Commands
@@ -148,14 +163,22 @@ mpak bundle run @nimblebraininc/echo --update
 Options:
 - `--update` - Force re-download even if cached
 
-**Claude Desktop Integration:**
+> **Tip:** Use `mpak run` as a shortcut for `mpak bundle run`.
+
+**Claude Code:**
+
+```bash
+claude mcp add --transport stdio echo -- mpak run @nimblebraininc/echo
+```
+
+**Claude Desktop:**
 
 ```json
 {
   "mcpServers": {
     "echo": {
       "command": "mpak",
-      "args": ["bundle", "run", "@nimblebraininc/echo"]
+      "args": ["run", "@nimblebraininc/echo"]
     }
   }
 }

@@ -142,6 +142,18 @@ git push && git push --tags
 | `mpak search <query> --type bundle` | Search bundles only |
 | `mpak search <query> --type skill` | Search skills only |
 
+### Run (Top-Level Alias)
+
+| Command | Description |
+|---------|-------------|
+| `mpak run <package>` | Run an MCP server (alias for `bundle run`) |
+
+This is the recommended way to integrate with Claude Code:
+
+```bash
+claude mcp add --transport stdio echo -- mpak run @nimblebraininc/echo
+```
+
 ### Bundle Commands
 
 | Command | Description |

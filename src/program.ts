@@ -55,6 +55,19 @@ export function createProgram(): Command {
     });
 
   // ==========================================================================
+  // Top-level run alias (for Claude Code integration)
+  // ==========================================================================
+
+  program
+    .command('run [package]')
+    .description('Run an MCP server (alias for "bundle run")')
+    .option('--update', 'Force re-download even if cached')
+    .option('-l, --local <path>', 'Run a local .mcpb bundle file')
+    .action(async (packageSpec, options) => {
+      await handleRun(packageSpec || '', options);
+    });
+
+  // ==========================================================================
   // Bundle namespace (MCP bundles)
   // ==========================================================================
 
@@ -92,11 +105,12 @@ export function createProgram(): Command {
     });
 
   bundle
-    .command('run <package>')
+    .command('run [package]')
     .description('Run an MCP server from the registry')
     .option('--update', 'Force re-download even if cached')
+    .option('-l, --local <path>', 'Run a local .mcpb bundle file')
     .action(async (packageSpec, options) => {
-      await handleRun(packageSpec, options);
+      await handleRun(packageSpec || '', options);
     });
 
   // ==========================================================================
