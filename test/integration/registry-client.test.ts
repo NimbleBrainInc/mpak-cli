@@ -35,7 +35,7 @@ describe('RegistryClient Integration', () => {
       const echoBundle = result.bundles.find(b => b.name === testBundle);
       expect(echoBundle).toBeDefined();
       expect(echoBundle?.description).toContain('Echo');
-    });
+    }, 15000); // Allow extra time for API cold start
 
     it('should return empty results for nonsense query', async () => {
       const result = await client.searchBundles('xyznonexistent12345');
